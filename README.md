@@ -163,9 +163,10 @@ If you are new to optics, here is a quick primer:
 - **Profunctor Optics**: A popular implementation technique for optics in languages following Haskell's `lens` library. Ocular **does not** use profunctors but instead uses "concrete representations" (explicit get/set functions) like F#'s Aether. This makes type errors far simpler and more approachable in Gleam.
 
 For a deeper dive into optic theory (which translates well into Ocular's concepts), check out:
-- [Aether's Documentation](https://xyncro.tech/aether/)
-- [Optics by Example (Haskell)](https://leanpub.com/optics-by-example)
+- [Practical Guide to F# Aether](https://dev.to/chinedu_101/ingesting-data-in-f-with-aether-a-practical-guide-to-using-lenses-prisms-and-morphisms-5ch9)
 - [Monocle's Optics Guide (Scala)](https://www.optics.dev/Monocle/docs/optics)
+- [Lenses In Pictures (F#)](https://medium.com/@dtchepak/lenses-in-pictures-1d0c4ef7fce0)
+- [A Little Lens Starter Tutorial (Haskell)](https://www.schoolofhaskell.com/school/to-infinity-and-beyond/pick-of-the-week/a-little-lens-starter-tutorial)
 
 ## Optic Types
 
