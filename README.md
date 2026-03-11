@@ -27,26 +27,75 @@ gleam add ocular@1
 ## Quick Start
 
 ```gleam
+import gleam/option.{type Option, Some, None}
+import gleam/dict.{type Dict}
+import gleam/string
 import ocular
 import ocular/compose as c
 
 // Define your data types
-pub type User {
-  User(name: String, age: Int)
+pub type Address {
+  Address(street: String, city: Option(String))
 }
 
-// Create a lens for a field
-let name_lens = ocular.lens(
+pub type Company {
+  Company(name: String, address: Address)
+}
+
+pub type User {
+  User(id: String, name: String, company: Company, tags: Dict(String, String))
+}
+
+// Create lenses for your fields
+let user_name_lens = ocular.lens(
   get: fn(user: User) { user.name },
   set: fn(new_name, user: User) { User(..user, name: new_name) },
 )
 
-// Use it
-let user = User(name: "Alice", age: 30)
+let user_company_lens = ocular.lens(
+  get: fn(user: User) { user.company },
+  set: fn(new_company, user: User) { User(..user, company: new_company) },
+)
 
-ocular.get(user, name_lens)           // "Alice"
-ocular.set(user, name_lens, "Bob")    // User(name: "Bob", age: 30)
-ocular.modify(user, name_lens, string.uppercase)  // User(name: "ALICE", age: 30)
+let company_address_lens = ocular.lens(
+  get: fn(company: Company) { company.address },
+  set: fn(new_address, company: Company) { Company(..company, address: new_address) },
+)
+
+let address_street_lens = ocular.lens(
+  get: fn(address: Address) { address.street },
+  set: fn(new_street, address: Address) { Address(..address, street: new_street) },
+)
+
+let address_city_opt = ocular.optional(
+  get_opt: fn(address: Address) { option.to_result(address.city, Nil) },
+  set_opt: fn(new_city, address: Address) { Address(..address, city: Some(new_city)) },
+)
+
+let user_tags_lens = ocular.lens(
+  get: fn(user: User) { user.tags },
+  set: fn(new_tags, user: User) { User(..user, tags: new_tags) },
+)
+
+let user_id_lens = ocular.lens(
+  get: fn(user: User) { user.id },
+  set: fn(new_id, user: User) { User(..user, id: new_id) },
+)
+
+// Define your data
+let my_address = Address(street: "123 Main St", city: Some("Springfield"))
+let my_company = Company(name: "Acme Corp", address: my_address)
+let user = User(
+  id: "100", 
+  name: "Alice", 
+  company: my_company, 
+  tags: dict.from_list([#("role", "admin")]),
+)
+
+// Use it
+ocular.get(user, user_name_lens)           // "Alice"
+ocular.set(user, user_name_lens, "Bob")    // User(.., name: "Bob", ..)
+ocular.modify(user, user_name_lens, string.uppercase)  // User(.., name: "ALICE", ..)
 ```
 
 ## Composition (The Aether Way)
@@ -59,12 +108,19 @@ let street_lens = user_company_lens
   |> c.lens(company_address_lens)
   |> c.lens(address_street_lens)
 
+ocular.get(user, street_lens) // "123 Main St"
+ocular.set(user, street_lens, "456 Elm St") // Deep update user -> company -> address
+
 // Cross-type compositions
+let user_address_lens = user_company_lens |> c.lens(company_address_lens)
+
 let city_opt = user_address_lens
   |> c.lens_opt(address_city_opt)  // Lens + Optional = Optional
 
+ocular.get_opt(user, city_opt) // Ok("Springfield")
+
 // Prism with review
-let circle = ocular.review(circle_prism(), 5.0)  // Circle(5.0)
+let active_status = ocular.review(ocular.some(), "Active")  // Some("Active")
 ```
 
 ### Composition Reference
@@ -91,6 +147,25 @@ let circle = ocular.review(circle_prism(), 5.0)  // Circle(5.0)
 | `c.prism_epi` | Prism + Epimorphism | Prism | Match then convert |
 
 **Note:** `prism_lens` returns an `Optional` (not a `Prism`) because we can't implement `review` without a default value for the middle structure.
+
+## What are Optics?
+
+Optics are composable abstractions for accessing and modifying parts of immutable data structures. Functional programming uses different types of optics to handle different data guarantees (e.g., whether a field is guaranteed to be present, whether a conversion can fail, etc.). 
+
+If you are new to optics, here is a quick primer:
+
+- **Lens**: Think of a Lens as a getter/setter pair for a field in a record. It guarantees the field is present, allowing you to focus on a smaller part of a larger structure.
+- **Prism**: A Prism focuses on one specific case (variant) of a custom type. Because a type could be a different variant, accessing via a Prism might fail. They are useful for variants like `Some`, `Ok`, or any custom union type.
+- **Optional (Affine Traversal)**: A combination of a Lens and a Prism. It focuses on a part of a structure that *might* not be there (like looking up a key in a Dictionary or a specific index in a List). 
+- **Isomorphism (Iso)**: Represents a lossless, two-way conversion between two types. If you convert `A` to `B` and back to `A`, you get exactly what you started with. Example: mapping between a tuple and a record.
+- **Epimorphism (Epi)**: A partial isomorphism. Converting `A` to `B` might fail, but converting `B` back to `A` always succeeds. Example: parsing a `String` to an `Int`.
+- **Traversal**: Similar to a Lens but focuses on *multiple* targets simultaneously rather than just one. Think of mapping over all elements in a `List` or a `Dict`.
+- **Profunctor Optics**: A popular implementation technique for optics in languages following Haskell's `lens` library. Ocular **does not** use profunctors but instead uses "concrete representations" (explicit get/set functions) like F#'s Aether. This makes type errors far simpler and more approachable in Gleam.
+
+For a deeper dive into optic theory (which translates well into Ocular's concepts), check out:
+- [Aether's Documentation](https://xyncro.tech/aether/)
+- [Optics by Example (Haskell)](https://leanpub.com/optics-by-example)
+- [Monocle's Optics Guide (Scala)](https://www.optics.dev/Monocle/docs/optics)
 
 ## Optic Types
 
@@ -123,15 +198,15 @@ Handle paths that might not exist:
 ```gleam
 import ocular/compose as c
 
-// Dictionary key access returns an Optional
-let name_opt = user
-  |> c.lens_opt(ocular.dict_key("name"))  // May fail
+// We can compose our user_tags_lens with a dictionary key accessor
+let role_opt = user_tags_lens
+  |> c.lens_opt(ocular.dict_key("role"))  // Lens + Optional = Optional
 
 // Safe access - returns Result
-ocular.get_opt(name_opt, user)  // Ok("Alice") or Error(Nil)
+ocular.get_opt(user, role_opt)  // Ok("admin")
 
 // Safe update
-ocular.set_opt(name_opt, "Bob", user)
+ocular.set_opt(user, role_opt, "superuser")
 ```
 
 ## Epimorphisms (Partial Isomorphisms)
@@ -139,6 +214,7 @@ ocular.set_opt(name_opt, "Bob", user)
 Epimorphisms are useful for conversions that may fail in one direction but always succeed in reverse (e.g., parsing):
 
 ```gleam
+import gleam/int
 import ocular
 import ocular/compose as c
 
@@ -159,10 +235,11 @@ ocular.get_epi("abc", string_int_epi)    // Error(Nil)
 ocular.reverse_epi(string_int_epi, 42)   // "42"
 
 // Compose with lenses
-let user_age = user_name_lens
+let user_id_int = user_id_lens
   |> c.lens_epi(string_int_epi)  // Lens + Epimorphism = Optional
 
-ocular.get_opt(user, user_age)  // Ok(25) if user.name = "25"
+ocular.get_opt(user, user_id_int)  // Ok(100) since user.id = "100"
+ocular.set_opt(user, user_id_int, 999) // Updates user.id deep to "999"
 ```
 
 ## Common Optics
@@ -238,7 +315,7 @@ gleam run -m ocular_gen -- src/models.gleam src/models/lenses.gleam
 **Input** (`src/models.gleam`):
 ```gleam
 pub type User {
-  User(name: String, email: String, age: Int)
+  User(id: String, name: String, company: Company, tags: Dict(String, String))
 }
 ```
 
