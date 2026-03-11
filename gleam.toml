@@ -1,5 +1,5 @@
 name = "ocular"
-version = "1.0.0"
+version = "1.1.0"
 description = "A functional lens library for Gleam - inspired by Aether"
 licences = ["MIT"]
 authors = ["Mafinar K"]

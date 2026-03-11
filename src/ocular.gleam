@@ -361,7 +361,10 @@ pub fn modify_iso(source: s, iso: Iso(s, t, a, b), with f: fn(a) -> b) -> t {
 /// let result = ocular.get_epi("42", epi)  // Ok(42)
 /// let fail = ocular.get_epi("hello", epi)  // Error(Nil)
 /// ```
-pub fn get_epi(source: s, epimorphism: Epimorphism(s, t, a, b)) -> Result(a, Nil) {
+pub fn get_epi(
+  source: s,
+  epimorphism: Epimorphism(s, t, a, b),
+) -> Result(a, Nil) {
   operations.get_epi(source, epimorphism)
 }
 
@@ -683,10 +686,7 @@ pub fn prism_from_epimorphism(
 pub fn optional_from_epimorphism(
   epimorphism: Epimorphism(s, t, a, b),
 ) -> Optional(s, t, a, b) {
-  Optional(
-    get: epimorphism.get,
-    set: fn(b, _s) { epimorphism.reverse(b) },
-  )
+  Optional(get: epimorphism.get, set: fn(b, _s) { epimorphism.reverse(b) })
 }
 
 // ==========================================

@@ -503,10 +503,9 @@ pub fn lens_epi(
   lens: Lens(a, a, c, c),
   epi: Epimorphism(c, c, e, e),
 ) -> Optional(a, a, e, e) {
-  Optional(
-    get: fn(s) { epi.get(lens.get(s)) },
-    set: fn(v, s) { lens.set(epi.reverse(v), s) },
-  )
+  Optional(get: fn(s) { epi.get(lens.get(s)) }, set: fn(v, s) {
+    lens.set(epi.reverse(v), s)
+  })
 }
 
 /// Compose a prism with an epimorphism.
@@ -545,10 +544,9 @@ pub fn iso_epi(
   iso: Iso(a, a, c, c),
   epi: Epimorphism(c, c, e, e),
 ) -> Epimorphism(a, a, e, e) {
-  Epimorphism(
-    get: fn(s) { epi.get(iso.get(s)) },
-    reverse: fn(v) { iso.reverse(epi.reverse(v)) },
-  )
+  Epimorphism(get: fn(s) { epi.get(iso.get(s)) }, reverse: fn(v) {
+    iso.reverse(epi.reverse(v))
+  })
 }
 
 /// Compose an epimorphism with an iso.
