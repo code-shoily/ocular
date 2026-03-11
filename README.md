@@ -84,12 +84,17 @@ let circle = ocular.review(circle_prism(), 5.0)  // Circle(5.0)
 | `c.iso_prism` | Iso + Prism | Prism | Shift then match |
 | `c.prism_iso` | Prism + Iso | Prism | Match then shift |
 | `c.iso_opt` | Iso + Optional | Optional | Shift then try |
+| `c.epi` | Epimorphism + Epimorphism | Epimorphism | Chain partial conversions |
+| `c.epi_iso` | Epimorphism + Iso | Epimorphism | Convert then shift |
+| `c.iso_epi` | Iso + Epimorphism | Epimorphism | Shift then convert |
+| `c.lens_epi` | Lens + Epimorphism | Optional | Focus then convert |
+| `c.prism_epi` | Prism + Epimorphism | Prism | Match then convert |
 
 **Note:** `prism_lens` returns an `Optional` (not a `Prism`) because we can't implement `review` without a default value for the middle structure.
 
 ## Optic Types
 
-Ocular provides five optic types, each with different capabilities:
+Ocular provides six optic types, each with different capabilities:
 
 | Optic | Can Read? | Can Write? | Multi-focus? | Reversible? | Reliability |
 |-------|-----------|------------|--------------|-------------|-------------|
@@ -97,6 +102,7 @@ Ocular provides five optic types, each with different capabilities:
 | **Lens** | ✅ | ✅ | No | ❌ | 100% (Guaranteed) |
 | **Prism** | ✅ | ✅ | No | ✅ | Partial (May fail) |
 | **Optional** | ✅ | ✅ | No | ❌ | Partial (May fail) |
+| **Epimorphism** | ✅ | ✅ | No | ✅ | Partial (May fail) |
 | **Traversal** | ✅ | ✅ | Yes | ❌ | 0 to N |
 
 **Rule of thumb:** The resulting optic is only as strong as its weakest link.
@@ -107,6 +113,7 @@ Ocular provides five optic types, each with different capabilities:
 - **Lens** - Guaranteed access to record fields
 - **Prism** - Matching specific variants (e.g., `Some` or `Ok`)
 - **Optional** - Paths that might not exist (e.g., dict keys)
+- **Epimorphism** - Partial conversions with guaranteed reverse (e.g., String → Int parsing)
 - **Traversal** - Operating on multiple elements (e.g., all list items)
 
 ## Working with Optional Values
@@ -125,6 +132,37 @@ ocular.get_opt(name_opt, user)  // Ok("Alice") or Error(Nil)
 
 // Safe update
 ocular.set_opt(name_opt, "Bob", user)
+```
+
+## Epimorphisms (Partial Isomorphisms)
+
+Epimorphisms are useful for conversions that may fail in one direction but always succeed in reverse (e.g., parsing):
+
+```gleam
+import ocular
+import ocular/compose as c
+
+// String <-> Int epimorphism (parse may fail)
+let string_int_epi = ocular.epimorphism(
+  get: fn(s) {
+    case int.parse(s) {
+      Ok(n) -> Ok(n)
+      Error(_) -> Error(Nil)
+    }
+  },
+  reverse: fn(n) { int.to_string(n) },
+)
+
+// Use it
+ocular.get_epi("42", string_int_epi)     // Ok(42)
+ocular.get_epi("abc", string_int_epi)    // Error(Nil)
+ocular.reverse_epi(string_int_epi, 42)   // "42"
+
+// Compose with lenses
+let user_age = user_name_lens
+  |> c.lens_epi(string_int_epi)  // Lens + Epimorphism = Optional
+
+ocular.get_opt(user, user_age)  // Ok(25) if user.name = "25"
 ```
 
 ## Common Optics
@@ -254,6 +292,16 @@ gleam run   # Run the project
 gleam test  # Run the tests
 gleam docs   # Generate documentation
 ```
+
+### Git Hooks
+
+Install the pre-commit hook to ensure code is formatted before committing:
+
+```sh
+./scripts/install-hooks
+```
+
+To bypass the hook in an emergency: `git commit --no-verify`
 
 ## Acknowledgements
 
