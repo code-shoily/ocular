@@ -129,6 +129,36 @@ pub type Iso(s, t, a, b) {
   Iso(get: fn(s) -> a, reverse: fn(b) -> t)
 }
 
+/// An Epimorphism represents a partial isomorphism.
+/// Like an Iso, it can convert between two types, but the forward direction
+/// may fail (returning an error). The reverse direction always succeeds.
+///
+/// This is useful when you have a surjective mapping where not all source
+/// values map to valid target values.
+///
+/// ## Example
+/// ```gleam
+/// // Parse string to int (may fail), convert int back to string (always succeeds)
+/// pub fn string_int_epimorphism() -> Epimorphism(String, String, Int, Int) {
+///   Epimorphism(
+///     get: fn(s) {
+///       case int.parse(s) {
+///         Ok(n) -> Ok(n)
+///         Error(_) -> Error(Nil)
+///       }
+///     },
+///     reverse: fn(n) { int.to_string(n) },
+///   )
+/// }
+/// ```
+pub type Epimorphism(s, t, a, b) {
+  Epimorphism(get: fn(s) -> Result(a, Nil), reverse: fn(b) -> t)
+}
+
+/// A simple monomorphic epimorphism.
+pub type SimpleEpimorphism(s, a) =
+  Epimorphism(s, s, a, a)
+
 /// A Traversal focuses on zero to many parts of a structure simultaneously.
 /// This is the "Eager Gleam" version of a multi-focus optic.
 ///

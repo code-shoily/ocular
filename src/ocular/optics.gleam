@@ -15,6 +15,27 @@ import ocular/types.{
 }
 
 // ==========================================
+// Identity Optic
+// ==========================================
+
+/// The identity lens. Focuses on the whole structure.
+///
+/// This is the neutral element for lens composition:
+/// - `id |> compose.lens(other)` = `other`
+/// - `other |> compose.lens(id)` = `other`
+///
+/// ## Example
+/// ```gleam
+/// let x = "hello"
+/// ocular.get(x, id())  // "hello"
+/// ocular.set(x, id(), "world")  // "world"
+/// ocular.modify(x, id(), string.uppercase)  // "HELLO"
+/// ```
+pub fn id() -> Lens(a, b, a, b) {
+  Lens(get: fn(x) { x }, set: fn(y, _x) { y })
+}
+
+// ==========================================
 // Dict Optics
 // ==========================================
 

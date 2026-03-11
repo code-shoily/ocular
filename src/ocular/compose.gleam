@@ -51,7 +51,8 @@
 
 import gleam/result
 import ocular/types.{
-  type Iso, type Lens, type Optional, type Prism, Iso, Lens, Optional, Prism,
+  type Epimorphism, type Iso, type Lens, type Optional, type Prism, Epimorphism,
+  Iso, Lens, Optional, Prism,
 }
 
 // ==========================================
@@ -458,5 +459,115 @@ pub fn opt_prism(
         Error(_) -> s
       }
     },
+  )
+}
+
+// ==========================================
+// Epimorphism Compositions
+// ==========================================
+
+/// Compose two epimorphisms.
+/// Result: Epimorphism (both gets may fail)
+///
+/// ## Example
+/// ```gleam
+/// // String -> Int (parse), Int -> Bool (is positive)
+/// let string_positive = string_int_epi |> compose.epi(int_positive_epi)
+///
+/// compose.get_epi("42", string_positive)  // Ok(True)
+/// compose.get_epi("-5", string_positive)  // Ok(False)
+/// compose.get_epi("abc", string_positive)  // Error(Nil)
+/// ```
+pub fn epi(
+  outer: Epimorphism(a, a, c, c),
+  inner: Epimorphism(c, c, e, e),
+) -> Epimorphism(a, a, e, e) {
+  Epimorphism(
+    get: fn(s) { result.try(outer.get(s), fn(v) { inner.get(v) }) },
+    reverse: fn(v) { outer.reverse(inner.reverse(v)) },
+  )
+}
+
+/// Compose a lens with an epimorphism.
+/// Result: Optional (the epimorphism may fail)
+///
+/// ## Example
+/// ```gleam
+/// // User -> String (name), String -> Int (parse)
+/// let user_age_from_string = user_name_lens |> compose.lens_epi(string_int_epi)
+///
+/// // If user.name = "25", get_opt returns Ok(25)
+/// // If user.name = "abc", get_opt returns Error(Nil)
+/// ```
+pub fn lens_epi(
+  lens: Lens(a, a, c, c),
+  epi: Epimorphism(c, c, e, e),
+) -> Optional(a, a, e, e) {
+  Optional(
+    get: fn(s) { epi.get(lens.get(s)) },
+    set: fn(v, s) { lens.set(epi.reverse(v), s) },
+  )
+}
+
+/// Compose a prism with an epimorphism.
+/// Result: Prism
+///
+/// ## Example
+/// ```gleam
+/// // Some(String) -> String, String -> Int
+/// let some_int = ocular.some() |> compose.prism_epi(string_int_epi)
+///
+/// compose.preview(Some("42"), some_int)  // Ok(42)
+/// compose.review(some_int, 100)  // Some("100")
+/// ```
+pub fn prism_epi(
+  prism: Prism(a, a, c, c),
+  epi: Epimorphism(c, c, e, e),
+) -> Prism(a, a, e, e) {
+  Prism(
+    get: fn(s) { result.try(prism.get(s), fn(inner) { epi.get(inner) }) },
+    set: fn(v, s) { prism.set(epi.reverse(v), s) },
+    review: fn(v) { prism.review(epi.reverse(v)) },
+  )
+}
+
+/// Compose an iso with an epimorphism.
+/// Result: Epimorphism
+///
+/// ## Example
+/// ```gleam
+/// // List -> String (concat), String -> Int (parse)
+/// let list_int = list_string_iso |> compose.iso_epi(string_int_epi)
+///
+/// compose.get_epi(["4", "2"], list_int)  // Ok(42) after concat->parse
+/// ```
+pub fn iso_epi(
+  iso: Iso(a, a, c, c),
+  epi: Epimorphism(c, c, e, e),
+) -> Epimorphism(a, a, e, e) {
+  Epimorphism(
+    get: fn(s) { epi.get(iso.get(s)) },
+    reverse: fn(v) { iso.reverse(epi.reverse(v)) },
+  )
+}
+
+/// Compose an epimorphism with an iso.
+/// Result: Epimorphism
+///
+/// ## Example
+/// ```gleam
+/// // String -> Int (parse), Int -> Float (convert)
+/// let string_float = string_int_epi |> compose.epi_iso(int_float_iso)
+///
+/// compose.get_epi("3.14", string_float)  // Error(Nil) - can't parse "3.14" as Int
+/// compose.get_epi("42", string_float)    // Ok(42.0)
+/// ```
+pub fn epi_iso(
+  epi: Epimorphism(a, a, c, c),
+  iso: Iso(c, c, e, e),
+) -> Epimorphism(a, a, e, e) {
+  Epimorphism(
+    get: fn(s) { result.try(epi.get(s), fn(v) { Ok(iso.get(v)) }) },
+    reverse: fn(v) { epi.reverse(iso.reverse(v)) },
   )
 }

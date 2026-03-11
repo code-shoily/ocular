@@ -21,8 +21,8 @@
 //// or when building higher-level abstractions.
 
 import ocular/types.{
-  type Iso, type Lens, type Optional, type Prism, type SimpleOptional,
-  type SimplePrism, type Traversal,
+  type Epimorphism, type Iso, type Lens, type Optional, type Prism,
+  type SimpleOptional, type SimplePrism, type Traversal,
 }
 
 // ==========================================
@@ -292,6 +292,80 @@ pub fn reverse(iso: Iso(s, t, a, b), value: b) -> t {
 /// ```
 pub fn modify_iso(source: s, iso: Iso(s, t, a, b), with f: fn(a) -> b) -> t {
   iso.reverse(f(iso.get(source)))
+}
+
+// ==========================================
+// Epimorphism Operations
+// ==========================================
+
+/// Try to get the focused value through an epimorphism.
+/// Returns `Ok(value)` if successful, `Error(Nil)` otherwise.
+///
+/// ## Example
+/// ```gleam
+/// let epi = ocular.epimorphism(
+///   get: fn(s) {
+///     case int.parse(s) {
+///       Ok(n) -> Ok(n)
+///       Error(_) -> Error(Nil)
+///     }
+///   },
+///   reverse: fn(n) { int.to_string(n) },
+/// )
+/// 
+/// let result = get_epi("42", epi)  // Ok(42)
+/// let fail = get_epi("hello", epi)  // Error(Nil)
+/// ```
+pub fn get_epi(source: s, epi: Epimorphism(s, t, a, b)) -> Result(a, Nil) {
+  epi.get(source)
+}
+
+/// Reverse an epimorphism to construct the source type from the focus.
+///
+/// ## Example
+/// ```gleam
+/// let epi = ocular.epimorphism(
+///   get: fn(s) {
+///     case int.parse(s) {
+///       Ok(n) -> Ok(n)
+///       Error(_) -> Error(Nil)
+///     }
+///   },
+///   reverse: fn(n) { int.to_string(n) },
+/// )
+/// 
+/// let s = reverse_epi(epi, 42)  // "42"
+/// ```
+pub fn reverse_epi(epi: Epimorphism(s, t, a, b), value: b) -> t {
+  epi.reverse(value)
+}
+
+/// Modify through an epimorphism if the get succeeds.
+///
+/// ## Example
+/// ```gleam
+/// let epi = ocular.epimorphism(
+///   get: fn(s) {
+///     case int.parse(s) {
+///       Ok(n) -> Ok(n)
+///       Error(_) -> Error(Nil)
+///     }
+///   },
+///   reverse: fn(n) { int.to_string(n) },
+/// )
+/// 
+/// let doubled = modify_epi("5", epi, fn(n) { n * 2 })  // "10"
+/// let unchanged = modify_epi("hello", epi, fn(n) { n * 2 })  // "hello"
+/// ```
+pub fn modify_epi(
+  source: s,
+  epi: Epimorphism(s, s, a, a),
+  with f: fn(a) -> a,
+) -> s {
+  case epi.get(source) {
+    Ok(value) -> epi.reverse(f(value))
+    Error(_) -> source
+  }
 }
 
 // ==========================================

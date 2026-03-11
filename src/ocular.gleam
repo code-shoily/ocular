@@ -58,12 +58,12 @@
 ////
 //// Import optic types from `ocular/types`:
 //// ```gleam
-//// import ocular/types.{type Lens, type SimpleLens, type Prism, type Optional, type Iso, type Traversal}
+//// import ocular/types.{type Lens, type SimpleLens, type Prism, type Optional, type Iso, type Epimorphism, type Traversal}
 //// ```
 
 import ocular/types.{
-  type Iso, type Lens, type Optional, type Prism, type Traversal, Iso, Lens,
-  Optional, Prism,
+  type Epimorphism, type Iso, type Lens, type Optional, type Prism,
+  type Traversal, Epimorphism, Iso, Lens, Optional, Prism,
 }
 
 import gleam/dict.{type Dict}
@@ -340,6 +340,77 @@ pub fn modify_iso(source: s, iso: Iso(s, t, a, b), with f: fn(a) -> b) -> t {
 }
 
 // ==========================================
+// Epimorphism Operations
+// ==========================================
+
+/// Try to get the focused value through an epimorphism.
+/// Returns `Ok(value)` if successful, `Error(Nil)` otherwise.
+///
+/// ## Example
+/// ```gleam
+/// let epi = ocular.epimorphism(
+///   get: fn(s) {
+///     case int.parse(s) {
+///       Ok(n) -> Ok(n)
+///       Error(_) -> Error(Nil)
+///     }
+///   },
+///   reverse: fn(n) { int.to_string(n) },
+/// )
+/// 
+/// let result = ocular.get_epi("42", epi)  // Ok(42)
+/// let fail = ocular.get_epi("hello", epi)  // Error(Nil)
+/// ```
+pub fn get_epi(source: s, epimorphism: Epimorphism(s, t, a, b)) -> Result(a, Nil) {
+  operations.get_epi(source, epimorphism)
+}
+
+/// Reverse an epimorphism to construct the source type from the focus.
+///
+/// ## Example
+/// ```gleam
+/// let epi = ocular.epimorphism(
+///   get: fn(s) {
+///     case int.parse(s) {
+///       Ok(n) -> Ok(n)
+///       Error(_) -> Error(Nil)
+///     }
+///   },
+///   reverse: fn(n) { int.to_string(n) },
+/// )
+/// 
+/// let s = ocular.reverse_epi(epi, 42)  // "42"
+/// ```
+pub fn reverse_epi(epimorphism: Epimorphism(s, t, a, b), value: b) -> t {
+  operations.reverse_epi(epimorphism, value)
+}
+
+/// Modify through an epimorphism if the get succeeds.
+///
+/// ## Example
+/// ```gleam
+/// let epi = ocular.epimorphism(
+///   get: fn(s) {
+///     case int.parse(s) {
+///       Ok(n) -> Ok(n)
+///       Error(_) -> Error(Nil)
+///     }
+///   },
+///   reverse: fn(n) { int.to_string(n) },
+/// )
+/// 
+/// let doubled = ocular.modify_epi("5", epi, fn(n) { n * 2 })  // "10"
+/// let unchanged = ocular.modify_epi("hello", epi, fn(n) { n * 2 })  // "hello"
+/// ```
+pub fn modify_epi(
+  source: s,
+  epimorphism: Epimorphism(s, s, a, a),
+  with f: fn(a) -> a,
+) -> s {
+  operations.modify_epi(source, epimorphism, f)
+}
+
+// ==========================================
 // Traversal Operations
 // ==========================================
 
@@ -508,6 +579,114 @@ pub fn iso(
   reverse reverse_fn: fn(b) -> t,
 ) -> Iso(s, t, a, b) {
   Iso(get: get_fn, reverse: reverse_fn)
+}
+
+/// Create an epimorphism from get and reverse functions.
+/// Like an Iso, but the get may fail.
+///
+/// ## Example
+/// ```gleam
+/// // Epimorphism between String and Int (parsing)
+/// let string_int_epi = ocular.epimorphism(
+///   get: fn(s: String) {
+///     case int.parse(s) {
+///       Ok(n) -> Ok(n)
+///       Error(_) -> Error(Nil)
+///     }
+///   },
+///   reverse: fn(n: Int) { int.to_string(n) },
+/// )
+///
+/// let result = ocular.get_epi("42", string_int_epi)  // Ok(42)
+/// let fail = ocular.get_epi("hello", string_int_epi)  // Error(Nil)
+/// let str = ocular.reverse_epi(string_int_epi, 42)  // "42"
+/// ```
+pub fn epimorphism(
+  get get_fn: fn(s) -> Result(a, Nil),
+  reverse reverse_fn: fn(b) -> t,
+) -> Epimorphism(s, t, a, b) {
+  Epimorphism(get: get_fn, reverse: reverse_fn)
+}
+
+// ==========================================
+// Conversion Functions
+// ==========================================
+
+/// Convert an Iso to a Lens.
+/// The lens ignores the original value when setting.
+///
+/// ## Example
+/// ```gleam
+/// let reverse_iso = ocular.iso(
+///   get: list.reverse,
+///   reverse: list.reverse,
+/// )
+///
+/// let reverse_lens = ocular.lens_from_iso(reverse_iso)
+///
+/// let result = ocular.get([1, 2, 3], reverse_lens)  // [3, 2, 1]
+/// let set = ocular.set([1, 2, 3], reverse_lens, [4, 5])  // [5, 4]
+/// ```
+pub fn lens_from_iso(iso: Iso(s, t, a, b)) -> Lens(s, t, a, b) {
+  Lens(get: iso.get, set: fn(b, _s) { iso.reverse(b) })
+}
+
+/// Convert an Epimorphism to a Prism.
+/// The prism ignores the original value when setting.
+///
+/// ## Example
+/// ```gleam
+/// let string_int_epi = ocular.epimorphism(
+///   get: fn(s) {
+///     case int.parse(s) {
+///       Ok(n) -> Ok(n)
+///       Error(_) -> Error(Nil)
+///     }
+///   },
+///   reverse: fn(n) { int.to_string(n) },
+/// )
+///
+/// let string_int_prism = ocular.prism_from_epimorphism(string_int_epi)
+///
+/// let result = ocular.preview("42", string_int_prism)  // Ok(42)
+/// let constructed = ocular.review(string_int_prism, 42)  // "42"
+/// ```
+pub fn prism_from_epimorphism(
+  epimorphism: Epimorphism(s, t, a, b),
+) -> Prism(s, t, a, b) {
+  Prism(
+    get: epimorphism.get,
+    set: fn(b, _s) { epimorphism.reverse(b) },
+    review: epimorphism.reverse,
+  )
+}
+
+/// Convert an Epimorphism to an Optional.
+/// Similar to `prism_from_epimorphism` but returns an Optional instead.
+///
+/// ## Example
+/// ```gleam
+/// let string_int_epi = ocular.epimorphism(
+///   get: fn(s) {
+///     case int.parse(s) {
+///       Ok(n) -> Ok(n)
+///       Error(_) -> Error(Nil)
+///     }
+///   },
+///   reverse: fn(n) { int.to_string(n) },
+/// )
+///
+/// let string_int_opt = ocular.optional_from_epimorphism(string_int_epi)
+///
+/// let result = ocular.get_opt("42", string_int_opt)  // Ok(42)
+/// ```
+pub fn optional_from_epimorphism(
+  epimorphism: Epimorphism(s, t, a, b),
+) -> Optional(s, t, a, b) {
+  Optional(
+    get: epimorphism.get,
+    set: fn(b, _s) { epimorphism.reverse(b) },
+  )
 }
 
 // ==========================================
@@ -712,6 +891,23 @@ pub fn list_index(index: Int) -> Optional(List(a), List(a), a, a) {
 /// ```
 pub fn list_tail() -> Lens(List(a), List(a), List(a), List(a)) {
   optics.list_tail()
+}
+
+/// The identity lens. Focuses on the whole structure.
+///
+/// This is the neutral element for lens composition:
+/// - `id |> compose.lens(other)` = `other`
+/// - `other |> compose.lens(id)` = `other`
+///
+/// ## Example
+/// ```gleam
+/// let x = "hello"
+/// ocular.get(x, ocular.id())  // "hello"
+/// ocular.set(x, ocular.id(), "world")  // "world"
+/// ocular.modify(x, ocular.id(), string.uppercase)  // "HELLO"
+/// ```
+pub fn id() -> Lens(a, b, a, b) {
+  optics.id()
 }
 
 /// Lens for `Some` variant with default value for `None`.
