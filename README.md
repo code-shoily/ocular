@@ -163,9 +163,8 @@ If you are new to optics, here is a quick primer:
 - **Profunctor Optics**: A popular implementation technique for optics in languages following Haskell's `lens` library. Ocular **does not** use profunctors but instead uses "concrete representations" (explicit get/set functions) like F#'s Aether. This makes type errors far simpler and more approachable in Gleam.
 
 For a deeper dive into optic theory (which translates well into Ocular's concepts), check out:
-- [Practical Guide to F# Aether](https://dev.to/chinedu_101/ingesting-data-in-f-with-aether-a-practical-guide-to-using-lenses-prisms-and-morphisms-5ch9)
+
 - [Monocle's Optics Guide (Scala)](https://www.optics.dev/Monocle/docs/optics)
-- [Lenses In Pictures (F#)](https://medium.com/@dtchepak/lenses-in-pictures-1d0c4ef7fce0)
 - [A Little Lens Starter Tutorial (Haskell)](https://www.schoolofhaskell.com/school/to-infinity-and-beyond/pick-of-the-week/a-little-lens-starter-tutorial)
 
 ## Optic Types
@@ -298,6 +297,13 @@ let html_user = ocular.set(user_display_lens(), Html("<b>Alice</b>"), user)
 
 Since Gleam doesn't have macros, Ocular provides an **optional** code generator to eliminate lens boilerplate.
 
+**✨ New in v3.0 (Unreleased):**
+- **Prism generation for ADT variants** - Multi-variant types automatically generate prisms
+- **Optional generation for Option fields** - `Option(T)` fields generate `Optional` optics
+- **Multi-variant ADT handling** - Full support for sum types
+
+**v2.0:** Phase 1 improvements include proper exit codes, robust glob expansion (`**` support), smart module name extraction, better error messages, and comprehensive tests. See [CODEGEN_IMPROVEMENTS.md](CODEGEN_IMPROVEMENTS.md) for details.
+
 ### Option 1: Use the Generator (Recommended for larger projects)
 
 Copy the generator to your project:
@@ -309,31 +315,155 @@ cp build/packages/ocular/examples/ocular_gen_full.gleam src/ocular_gen.gleam
 # Add dev dependencies
 gleam add --dev glance simplifile
 
-# Generate lenses
-gleam run -m ocular_gen -- src/models.gleam src/models/lenses.gleam
+# Generate optics for a single file
+gleam run -m ocular_gen -- src/models.gleam src/models/optics.gleam
+
+# Or for multiple files with glob patterns
+gleam run -m ocular_gen -- 'src/domain/*.gleam' src/generated/optics.gleam
+
+# Or recursively across all subdirectories
+gleam run -m ocular_gen -- 'src/**/*.gleam' src/all_optics.gleam
 ```
+
+### What Gets Generated
+
+#### Lenses for Record Fields
 
 **Input** (`src/models.gleam`):
 ```gleam
 pub type User {
-  User(id: String, name: String, company: Company, tags: Dict(String, String))
+  User(id: String, name: String, age: Int)
 }
 ```
 
-**Output** (`src/models/lenses.gleam`):
+**Output** (`src/models/optics.gleam`):
 ```gleam
-// AUTO-GENERATED - do not edit manually
-import ocular
-import ocular/types.{type Lens, Lens}
-import models
-
 pub fn user_name() -> Lens(User, User, String, String) {
   Lens(
     get: fn(s) { s.name },
     set: fn(v, s) { User(..s, name: v) },
   )
 }
-// ... etc
+
+pub fn user_age() -> Lens(User, User, Int, Int) {
+  Lens(
+    get: fn(s) { s.age },
+    set: fn(v, s) { User(..s, age: v) },
+  )
+}
+```
+
+#### Optionals for Option Fields
+
+**Input**:
+```gleam
+pub type User {
+  User(name: String, email: Option(String), age: Int)
+}
+```
+
+**Output**:
+```gleam
+pub fn user_name() -> Lens(User, User, String, String) { ... }
+
+pub fn user_email() -> Optional(User, User, String, String) {
+  Optional(
+    get: fn(s) {
+      case s.email {
+        Some(v) -> Ok(v)
+        None -> Error(Nil)
+      }
+    },
+    set: fn(v, s) { User(..s, email: Some(v)) },
+  )
+}
+
+pub fn user_age() -> Lens(User, User, Int, Int) { ... }
+```
+
+#### Prisms for ADT Variants
+
+**Input**:
+```gleam
+pub type Shape {
+  Circle(radius: Float)
+  Rectangle(width: Float, height: Float)
+  Square(side: Float)
+  Point
+}
+```
+
+**Output**:
+```gleam
+pub fn shape_circle() -> Prism(Shape, Shape, Float, Float) {
+  Prism(
+    get: fn(s) {
+      case s {
+        Circle(radius: v) -> Ok(v)
+        _ -> Error(Nil)
+      }
+    },
+    set: fn(v, s) {
+      case s {
+        Circle(_) -> Circle(radius: v)
+        _ -> s
+      }
+    },
+    review: fn(v) { Circle(radius: v) },
+  )
+}
+
+pub fn shape_rectangle() -> Prism(Shape, Shape, #(Float, Float), #(Float, Float)) {
+  Prism(
+    get: fn(s) {
+      case s {
+        Rectangle(width: width, height: height) -> Ok(#(width, height))
+        _ -> Error(Nil)
+      }
+    },
+    set: fn(v, s) {
+      case s {
+        Rectangle(..) -> {
+          let #(width, height) = v
+          Rectangle(width: width, height: height)
+        }
+        _ -> s
+      }
+    },
+    review: fn(v) {
+      let #(width, height) = v
+      Rectangle(width: width, height: height)
+    },
+  )
+}
+
+pub fn shape_square() -> Prism(Shape, Shape, Float, Float) { ... }
+
+pub fn shape_point() -> Prism(Shape, Shape, Nil, Nil) {
+  Prism(
+    get: fn(s) {
+      case s {
+        Point -> Ok(Nil)
+        _ -> Error(Nil)
+      }
+    },
+    set: fn(_v, s) {
+      case s {
+        Point -> Point
+        _ -> s
+      }
+    },
+    review: fn(_v) { Point },
+  )
+}
+```
+
+#### Generator Output
+
+```
+✓ Generated src/models/optics.gleam
+  Files processed: 1
+  Lenses: 2, Prisms: 4, Optionals: 1
 ```
 
 ### Option 2: Write Lenses by Hand (Fine for smaller projects)
@@ -380,6 +510,22 @@ Install the pre-commit hook to ensure code is formatted before committing:
 ```
 
 To bypass the hook in an emergency: `git commit --no-verify`
+
+### Property-Based Testing
+
+Ocular includes comprehensive property-based tests to verify that all optics satisfy their mathematical laws. The test suite uses [qcheck](https://hexdocs.pm/qcheck/) to generate hundreds of random test cases for each law.
+
+**Optic Laws Tested:**
+- **Lens Laws**: GetPut, PutGet, PutPut
+- **Prism Laws**: ReviewPreview, PreviewReview
+- **Iso Laws**: GetReverse, ReverseGet
+- **Optional Laws**: GetSetOpt, PutGetOpt
+- **Epimorphism Laws**: GetReverse, ReverseGet
+- **Traversal Laws**: SetAllGetAll, ModifyAll equivalence
+
+See [OPTIC_LAWS.md](OPTIC_LAWS.md) for detailed explanations of each law and what they guarantee.
+
+**Why this matters:** These laws ensure that optics compose correctly and behave predictably. Property-based testing verifies laws hold across thousands of randomly generated inputs, not just hand-picked examples.
 
 ## Acknowledgements
 
