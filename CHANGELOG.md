@@ -5,70 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.0] - 2026-10-11
 
 ### Added
-- **Code Generator v3.0 - Advanced Optics Generation**:
-  - **Prism generation for ADT variants**: Multi-variant algebraic data types now automatically generate prisms
-    - Detects multi-variant types (e.g., `type Shape { Circle(...) | Rectangle(...) | Square(...) }`)
-    - Generates a prism for each variant (e.g., `shape_circle()`, `shape_rectangle()`, `shape_square()`)
-    - Handles variants with no fields, single fields, and multiple fields
-    - Supports both labeled and unlabeled fields
-    - Focus type intelligently determined (single field type, tuple for multiple, `Nil` for unit)
 
-  - **Optional generation for Option fields**: Fields typed as `Option(T)` generate `Optional` optics instead of lenses
-    - Automatically detects `Option(T)` field types
-    - Generates `get` that unwraps `Some(v) -> Ok(v)` or returns `Error(Nil)` for `None`
-    - Generates `set` that wraps values in `Some(v)`
-    - Provides type-safe access to optional fields without manual unwrapping
+- **Traversal Compositions (`ocular/compose`)**:
+  - Full cross-type composition support for `Traversal`:
+    - `traversal/2` (Traversal + Traversal)
+    - `traversal_lens/2` and `lens_traversal/2`
+    - `traversal_opt/2` and `opt_traversal/2`
+    - `traversal_prism/2` and `prism_traversal/2`
+    - `traversal_iso/2` and `iso_traversal/2`
+  - Allows targeting and updating fields, variants, and conversions across collections in one pipeline.
 
-  - **Multi-variant ADT handling**: Full support for sum types
-    - Previously multi-variant types were silently ignored
-    - Now generates comprehensive prism coverage for all variants
-    - Enables pattern matching and construction through generated optics
+- **Optic Laws Verification & Property-Based Testing**:
+  - Full algebraic law verification across all optic types via `qcheck` property-based tests in `test/ocular_laws_test.gleam`.
+  - Verifies *GetPut*, *PutGet*, *PutPut*, *ReviewPreview*, and round-trip *Iso* equivalence across randomized inputs.
+  - Added [OPTIC_LAWS.md](OPTIC_LAWS.md) explaining the algebraic guarantees.
 
-  - **Enhanced generator output**:
-    - Separate statistics for Lenses, Prisms, and Optionals in output
-    - Updated import statements to include all optic types
-    - Better documentation in generated files with source file tracking
-
-- **Property-Based Testing & Optic Law Verification**:
-  - **Comprehensive law tests** for all optic types in `test/ocular_laws_test.gleam`
-    - 38 new tests (32 property-based, 6 example-based)
-    - Total test suite now at 153 tests (up from 137)
-
-  - **Lens laws** verified with property-based testing:
-    - **GetPut Law**: `set(s, l, get(s, l)) == s` - Setting what you got doesn't change the structure
-    - **PutGet Law**: `get(set(s, l, v), l) == v` - You get back what you set
-    - **PutPut Law**: `set(set(s, l, v1), l, v2) == set(s, l, v2)` - Last set wins
-
-  - **Prism laws** verified:
-    - **ReviewPreview Law**: `preview(review(prism, value), prism) == Ok(value)` - Constructing then extracting returns the value
-
-  - **Isomorphism laws** verified:
-    - **GetReverse Law**: `get_iso(reverse(iso, b), iso) == b` - Round-trip equivalence
-    - **ReverseGet Law**: `reverse(get_iso(s, iso), iso) == s` - Reverse round-trip equivalence
-
-  - **Optional laws** verified with property-based testing
-  - **Epimorphism laws** verified with property-based testing
-  - **Traversal laws** verified with property-based testing
-  - **Composition laws** verified - Ensures composed optics maintain mathematical properties
-
-  - **Property-based testing infrastructure**:
-    - Uses `qcheck` library for generating hundreds of random test cases
-    - Custom generators for Person, Address, and other test types
-    - Verifies laws hold across diverse input spaces, not just hand-picked examples
-
-  - **Documentation**: `OPTIC_LAWS.md` - Comprehensive guide to optic laws and why they matter
+- **Documentation**:
+  - Added [COMPOSITION_REFERENCE.md](COMPOSITION_REFERENCE.md) containing the complete cross-type composition matrix.
+  - Streamlined `README.md` with a quick-start guide and practical built-in optics examples.
 
 ### Changed
-- Code generator function renamed from `generate_lenses` to `generate_optics` (more accurate)
-- Generated files now import `{type Lens, type Optional, type Prism, Lens, Optional, Prism}`
-- Usage examples updated to reflect multi-optic generation capabilities
 
-### Fixed
-- Multi-variant types are no longer silently ignored by the generator
-- Option fields no longer generate incorrect lens types that would fail at runtime
+- Updated `gleam_stdlib` dependency constraint to `>= 1.0.0 and < 2.0.0`.
+- Code generator template updated in `examples/ocular_gen_full.gleam` with ADT variant prism and optional field support (slated for a dedicated CLI release in a future version).
 
 ## [1.1.0] - 2026-03-10
 
