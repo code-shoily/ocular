@@ -48,11 +48,21 @@
 //// | Iso        | Prism      | Prism      | `iso_prism`   |
 //// | Iso        | Optional   | Optional   | `iso_opt`     |
 //// | Optional   | Prism      | Optional   | `opt_prism`   |
+//// | Traversal  | Traversal  | Traversal  | `traversal`   |
+//// | Traversal  | Lens       | Traversal  | `traversal_lens` |
+//// | Lens       | Traversal  | Traversal  | `lens_traversal` |
+//// | Traversal  | Optional   | Traversal  | `traversal_opt`  |
+//// | Optional   | Traversal  | Traversal  | `opt_traversal`  |
+//// | Traversal  | Prism      | Traversal  | `traversal_prism`|
+//// | Prism      | Traversal  | Traversal  | `prism_traversal`|
+//// | Traversal  | Iso        | Traversal  | `traversal_iso`  |
+//// | Iso        | Traversal  | Traversal  | `iso_traversal`  |
 
+import gleam/list
 import gleam/result
 import ocular/types.{
-  type Epimorphism, type Iso, type Lens, type Optional, type Prism, Epimorphism,
-  Iso, Lens, Optional, Prism,
+  type Epimorphism, type Iso, type Lens, type Optional, type Prism,
+  type Traversal, Epimorphism, Iso, Lens, Optional, Prism, Traversal,
 }
 
 // ==========================================
@@ -567,5 +577,204 @@ pub fn epi_iso(
   Epimorphism(
     get: fn(s) { result.try(epi.get(s), fn(v) { Ok(iso.get(v)) }) },
     reverse: fn(v) { epi.reverse(iso.reverse(v)) },
+  )
+}
+
+// ==========================================
+// Traversal Compositions
+// ==========================================
+
+/// Compose two traversals.
+/// Result: Traversal
+///
+/// ## Example
+/// ```gleam
+/// let matrix = [[1, 2], [3, 4]]
+/// let all_elements = compose.traversal(ocular.list_traversal(), ocular.list_traversal())
+/// ocular.get_all(matrix, all_elements)  // [1, 2, 3, 4]
+/// ```
+pub fn traversal(
+  outer: Traversal(a, b, c, d),
+  inner: Traversal(c, d, e, f),
+) -> Traversal(a, b, e, f) {
+  Traversal(
+    get_all: fn(s) {
+      list.flat_map(outer.get_all(s), fn(sub) { inner.get_all(sub) })
+    },
+    update: fn(modify_fn, s) {
+      outer.update(fn(sub) { inner.update(modify_fn, sub) }, s)
+    },
+  )
+}
+
+/// Compose a traversal with a lens.
+/// Result: Traversal
+///
+/// ## Example
+/// ```gleam
+/// let users = [User("Alice", 30), User("Bob", 25)]
+/// let user_names = compose.traversal_lens(ocular.list_traversal(), user_name_lens)
+/// ocular.get_all(users, user_names)  // ["Alice", "Bob"]
+/// ```
+pub fn traversal_lens(
+  outer: Traversal(a, b, c, d),
+  inner: Lens(c, d, e, f),
+) -> Traversal(a, b, e, f) {
+  Traversal(
+    get_all: fn(s) { list.map(outer.get_all(s), inner.get) },
+    update: fn(modify_fn, s) {
+      outer.update(fn(sub) { inner.set(modify_fn(inner.get(sub)), sub) }, s)
+    },
+  )
+}
+
+/// Compose a lens with a traversal.
+/// Result: Traversal
+///
+/// ## Example
+/// ```gleam
+/// let team = Team(members: ["Alice", "Bob"])
+/// let team_members = compose.lens_traversal(team_members_lens, ocular.list_traversal())
+/// ocular.get_all(team, team_members)  // ["Alice", "Bob"]
+/// ```
+pub fn lens_traversal(
+  outer: Lens(a, b, c, d),
+  inner: Traversal(c, d, e, f),
+) -> Traversal(a, b, e, f) {
+  Traversal(
+    get_all: fn(s) { inner.get_all(outer.get(s)) },
+    update: fn(modify_fn, s) {
+      outer.set(inner.update(modify_fn, outer.get(s)), s)
+    },
+  )
+}
+
+/// Compose a traversal with an optional.
+/// Result: Traversal
+pub fn traversal_opt(
+  outer: Traversal(a, b, c, c),
+  inner: Optional(c, c, e, e),
+) -> Traversal(a, b, e, e) {
+  Traversal(
+    get_all: fn(s) {
+      list.filter_map(outer.get_all(s), fn(sub) {
+        case inner.get(sub) {
+          Ok(val) -> Ok(val)
+          Error(_) -> Error(Nil)
+        }
+      })
+    },
+    update: fn(modify_fn, s) {
+      outer.update(
+        fn(sub) {
+          case inner.get(sub) {
+            Ok(val) -> inner.set(modify_fn(val), sub)
+            Error(_) -> sub
+          }
+        },
+        s,
+      )
+    },
+  )
+}
+
+/// Compose an optional with a traversal.
+/// Result: Traversal
+pub fn opt_traversal(
+  outer: Optional(a, a, c, d),
+  inner: Traversal(c, d, e, f),
+) -> Traversal(a, a, e, f) {
+  Traversal(
+    get_all: fn(s) {
+      case outer.get(s) {
+        Ok(sub) -> inner.get_all(sub)
+        Error(_) -> []
+      }
+    },
+    update: fn(modify_fn, s) {
+      case outer.get(s) {
+        Ok(sub) -> outer.set(inner.update(modify_fn, sub), s)
+        Error(_) -> s
+      }
+    },
+  )
+}
+
+/// Compose a traversal with a prism.
+/// Result: Traversal
+pub fn traversal_prism(
+  outer: Traversal(a, b, c, c),
+  inner: Prism(c, c, e, e),
+) -> Traversal(a, b, e, e) {
+  Traversal(
+    get_all: fn(s) {
+      list.filter_map(outer.get_all(s), fn(sub) {
+        case inner.get(sub) {
+          Ok(val) -> Ok(val)
+          Error(_) -> Error(Nil)
+        }
+      })
+    },
+    update: fn(modify_fn, s) {
+      outer.update(
+        fn(sub) {
+          case inner.get(sub) {
+            Ok(val) -> inner.set(modify_fn(val), sub)
+            Error(_) -> sub
+          }
+        },
+        s,
+      )
+    },
+  )
+}
+
+/// Compose a prism with a traversal.
+/// Result: Traversal
+pub fn prism_traversal(
+  outer: Prism(a, a, c, d),
+  inner: Traversal(c, d, e, f),
+) -> Traversal(a, a, e, f) {
+  Traversal(
+    get_all: fn(s) {
+      case outer.get(s) {
+        Ok(sub) -> inner.get_all(sub)
+        Error(_) -> []
+      }
+    },
+    update: fn(modify_fn, s) {
+      case outer.get(s) {
+        Ok(sub) -> outer.set(inner.update(modify_fn, sub), s)
+        Error(_) -> s
+      }
+    },
+  )
+}
+
+/// Compose a traversal with an iso.
+/// Result: Traversal
+pub fn traversal_iso(
+  outer: Traversal(a, b, c, d),
+  inner: Iso(c, d, e, f),
+) -> Traversal(a, b, e, f) {
+  Traversal(
+    get_all: fn(s) { list.map(outer.get_all(s), inner.get) },
+    update: fn(modify_fn, s) {
+      outer.update(fn(sub) { inner.reverse(modify_fn(inner.get(sub))) }, s)
+    },
+  )
+}
+
+/// Compose an iso with a traversal.
+/// Result: Traversal
+pub fn iso_traversal(
+  outer: Iso(a, b, c, d),
+  inner: Traversal(c, d, e, f),
+) -> Traversal(a, b, e, f) {
+  Traversal(
+    get_all: fn(s) { inner.get_all(outer.get(s)) },
+    update: fn(modify_fn, s) {
+      outer.reverse(inner.update(modify_fn, outer.get(s)))
+    },
   )
 }

@@ -700,3 +700,113 @@ pub fn iso_optional_test() {
     Wrapper(Person(name: "Alice", address: Some(Address("New", "City")))),
   )
 }
+
+// ==========================================
+// Traversal Composition Tests
+// ==========================================
+
+pub fn traversal_traversal_test() {
+  let matrix = [[1, 2], [3, 4]]
+  let matrix_traversal =
+    compose.traversal(ocular.list_traversal(), ocular.list_traversal())
+
+  ocular.get_all(matrix, matrix_traversal)
+  |> should.equal([1, 2, 3, 4])
+
+  ocular.modify_all(matrix, matrix_traversal, fn(x) { x * 10 })
+  |> should.equal([[10, 20], [30, 40]])
+
+  ocular.set_all(matrix, matrix_traversal, 0)
+  |> should.equal([[0, 0], [0, 0]])
+}
+
+pub fn traversal_lens_test() {
+  let people = [
+    Address(street: "Main St", city: "NYC"),
+    Address(street: "Broad St", city: "LA"),
+  ]
+  let streets =
+    compose.traversal_lens(ocular.list_traversal(), address_city_lens())
+
+  ocular.get_all(people, streets)
+  |> should.equal(["NYC", "LA"])
+
+  ocular.modify_all(people, streets, string.lowercase)
+  |> should.equal([
+    Address(street: "Main St", city: "nyc"),
+    Address(street: "Broad St", city: "la"),
+  ])
+}
+
+pub type Group {
+  Group(members: List(String))
+}
+
+pub fn lens_traversal_test() {
+  let group_members_lens =
+    ocular.lens(get: fn(g: Group) { g.members }, set: fn(m, _g) {
+      Group(members: m)
+    })
+
+  let group = Group(members: ["alice", "bob"])
+  let group_names =
+    compose.lens_traversal(group_members_lens, ocular.list_traversal())
+
+  ocular.get_all(group, group_names)
+  |> should.equal(["alice", "bob"])
+
+  ocular.modify_all(group, group_names, string.uppercase)
+  |> should.equal(Group(members: ["ALICE", "BOB"]))
+}
+
+pub fn traversal_opt_test() {
+  let people = [
+    Person(name: "Alice", address: Some(Address("1st Ave", "NYC"))),
+    Person(name: "Bob", address: None),
+    Person(name: "Charlie", address: Some(Address("2nd Ave", "SF"))),
+  ]
+  let some_opt =
+    ocular.optional(
+      get: fn(opt: Maybe(a)) {
+        case opt {
+          Some(v) -> Ok(v)
+          None -> Error(Nil)
+        }
+      },
+      set: fn(v: a, _opt: Maybe(a)) { Some(v) },
+    )
+
+  let addresses =
+    compose.traversal_opt(
+      compose.traversal_lens(ocular.list_traversal(), person_address_lens()),
+      some_opt,
+    )
+
+  ocular.get_all(people, addresses)
+  |> should.equal([Address("1st Ave", "NYC"), Address("2nd Ave", "SF")])
+
+  ocular.modify_all(people, addresses, fn(a) { Address(..a, city: "Gotham") })
+  |> should.equal([
+    Person(name: "Alice", address: Some(Address("1st Ave", "Gotham"))),
+    Person(name: "Bob", address: None),
+    Person(name: "Charlie", address: Some(Address("2nd Ave", "Gotham"))),
+  ])
+}
+
+pub fn traversal_iso_test() {
+  let words = ["hello", "world"]
+  let chars_iso = ocular.iso(get: string.to_graphemes, reverse: string.concat)
+
+  let all_chars = compose.traversal_iso(ocular.list_traversal(), chars_iso)
+
+  ocular.get_all(words, all_chars)
+  |> should.equal([["h", "e", "l", "l", "o"], ["w", "o", "r", "l", "d"]])
+
+  ocular.modify_all(words, all_chars, fn(chars) {
+    case chars {
+      [first, ..rest] -> [string.uppercase(first), ..rest]
+      [] -> []
+    }
+  })
+  |> should.equal(["Hello", "World"])
+}
