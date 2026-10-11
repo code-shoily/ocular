@@ -4,13 +4,11 @@ description = "A functional lens library for Gleam - inspired by Aether"
 licences = ["MIT"]
 authors = ["Mafinar K"]
 repository = { type = "github", user = "code-shoily", repo = "ocular" }
-links = [
-  { title = "GitHub", href = "https://github.com/code-shoily/ocular" }
-]
+links = [{ title = "GitHub", href = "https://github.com/code-shoily/ocular" }]
 
 
 [dependencies]
-gleam_stdlib = ">= 0.44.0 and < 2.0.0"
+gleam_stdlib = ">= 1.0.0 and < 2.0.0"
 
 [dev-dependencies]
 gleeunit = ">= 1.0.0 and < 2.0.0"
